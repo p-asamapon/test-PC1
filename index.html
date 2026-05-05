@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Factory IoT Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Prompt', sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 2px solid var(--card-bg);
+            padding-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--accent-color);
+            font-weight: 600;
+            letter-spacing: 1px;
+            margin: 0;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 25px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .card h2 {
+            font-size: 1.2rem;
+            margin-top: 0;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h2::before {
+            content: '';
+            width: 4px;
+            height: 18px;
+            background: var(--accent-color);
+            border-radius: 10px;
+        }
+
+        #loading {
+            text-align: center;
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            padding: 50px;
+        }
+
+        canvas {
+            max-height: 350px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>FACTORY REAL-TIME MONITORING</h1>
+        <p style="color: var(--text-dim)">ข้อมูลสรุปประสิทธิภาพเครื่องจักรและอุณหภูมิ</p>
+    </header>
+
+    <div id="loading">กำลังดึงข้อมูลจากระบบ...</div>
+
+    <div class="dashboard-grid" id="dashboard" style="display: none;">
+        <div class="card">
+            <h2>Production Counter per Machine</h2>
+            <canvas id="counterChart"></canvas>
+        </div>
+
+        <div class="card">
+            <h2>Live Temperature Monitoring (Zone 1/1)</h2>
+            <canvas id="tempChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // URL สำหรับดึงข้อมูลในรูปแบบ CSV (แปลงจาก pubhtml เป็น csv เพื่อให้โค้ดดึงข้อมูลง่าย)
+    const sheetId = '1vTjMi9ReUUyW0kg97lGWA1cmrw6FeFxrAdbr6XUg1YZ3_BdDHEi9fcFvuqmohXmuVwXW_jEsvFvGv-g';
+    const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vTjMi9ReUUyW0kg97lGWA1cmrw6FeFxrAdbr6XUg1YZ3_BdDHEi9fcFvuqmohXmuVwXW_jEsvFvGv-g/pub?output=csv`;
+
+    async function initDashboard() {
+        try {
+            const response = await fetch(csvUrl);
+            const csvData = await response.text();
+            
+            // ใช้ PapaParse แปลง CSV เป็น JSON
+            Papa.parse(csvData, {
+                header: true,
+                dynamicTyping: true,
+                complete: (results) => {
+                    renderCharts(results.data);
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'grid';
+                }
+            });
+        } catch (error) {
+            document.getElementById('loading').innerHTML = "เกิดข้อผิดพลาดในการโหลดข้อมูล";
+            console.error(error);
+        }
+    }
+
+    function renderCharts(data) {
+        // กรองข้อมูลเฉพาะแถวที่มีชื่อเครื่องจักร
+        const cleanData = data.filter(d => d['ชื่อเครื่องจักร']);
+
+        // 1. จัดการข้อมูลสำหรับ Counter Chart
+        const counters = cleanData.filter(d => d['ชื่อเครื่องจักร'].includes('Counter_Act'));
+        const counterLabels = counters.map(d => d['ชื่อเครื่องจักร'].split('_')[0]);
+        const counterValues = counters.map(d => d['อุณหภูมิ']); // ในไฟล์ตัวอย่าง ค่า counter เก็บในช่องอุณหภูมิ
+
+        new Chart(document.getElementById('counterChart'), {
+            type: 'bar',
+            data: {
+                labels: counterLabels,
+                datasets: [{
+                    label: 'Units Produced',
+                    data: counterValues,
+                    backgroundColor: '#38bdf8',
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        // 2. จัดการข้อมูลสำหรับ Temperature Chart
+        const temps = cleanData.filter(d => d['ชื่อเครื่องจักร'].includes('Temp_Zone1/1_Act'));
+        const tempLabels = temps.map(d => d['ชื่อเครื่องจักร'].split('_')[0]);
+        const tempValues = temps.map(d => d['อุณหภูมิ']);
+
+        new Chart(document.getElementById('tempChart'), {
+            type: 'line',
+            data: {
+                labels: tempLabels,
+                datasets: [{
+                    label: 'Temperature (°C)',
+                    data: tempValues,
+                    borderColor: '#f472b6',
+                    backgroundColor: 'rgba(244, 114, 182, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#f472b6'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+    }
+
+    initDashboard();
+</script>
+
+</body>
+</html>
